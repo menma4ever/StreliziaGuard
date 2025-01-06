@@ -61,11 +61,11 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Parse duration
         duration_text = " ".join(context.args).lower()
         user_id = update.message.reply_to_message.from_user.id
-        if "minute" in duration_text:
+        if "m" in duration_text:
             duration = int(duration_text.split()[0]) * 60
-        elif "hour" in duration_text:
+        elif "h" in duration_text:
             duration = int(duration_text.split()[0]) * 3600
-        elif "day" in duration_text:
+        elif "d" in duration_text:
             duration = int(duration_text.split()[0]) * 86400
         else:
             raise ValueError("Invalid time format")
