@@ -1,5 +1,5 @@
-python-telegram-bot==20.3
-better-profanity==0.5.0
+python-telegram-bot
+better-profanity
 logging
 re
 time
