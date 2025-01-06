@@ -3,3 +3,4 @@ better-profanity==0.5.0
 logging
 re
 time
+flask
