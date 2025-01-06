@@ -1,6 +1,3 @@
 python-telegram-bot
 better-profanity
-logging
-re
-time
 flask
