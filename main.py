@@ -12,6 +12,8 @@ import logging
 import time
 import re
 from better_profanity import profanity
+from keep_alive import keep_alive
+keep_alive()
 
 # Set up logging
 logging.basicConfig(
