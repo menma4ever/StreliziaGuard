@@ -63,11 +63,11 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Parse duration
         duration_text = " ".join(context.args).lower()
         user_id = update.message.reply_to_message.from_user.id
-        if "m" in duration_text:
+        if "minute" in duration_text:
             duration = int(duration_text.split()[0]) * 60
-        elif "h" in duration_text:
+        elif "hour" in duration_text:
             duration = int(duration_text.split()[0]) * 3600
-        elif "d" in duration_text:
+        elif "day" in duration_text:
             duration = int(duration_text.split()[0]) * 86400
         else:
             raise ValueError("Invalid time format")
@@ -247,7 +247,7 @@ async def handle_advertisement(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
 # Spam detection
-async def handle_spam(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_spam(update: Update, context: ContextTypes.DEFAULT_TYPE):  
     if update.message.text.isupper():
         await update.message.delete()
         await update.message.reply_text(
@@ -260,6 +260,7 @@ async def handle_spam(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     # Replace 'YOUR_BOT_TOKEN' with your bot's API token from BotFather
     application = Application.builder().token("8175120417:AAHqwpE5iMvTibJxZu2atlw_gC4Y60Kdki8").build()
+    keep_alive()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("mute", mute_user))  # Mute command
