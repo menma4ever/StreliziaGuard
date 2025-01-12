@@ -5,7 +5,7 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    filters,
+    filters,    
     ContextTypes,
 )
 import logging
@@ -14,6 +14,7 @@ import re
 from better_profanity import profanity
 from keep_alive import keep_alive
 keep_alive()
+
 
 # Set up logging
 logging.basicConfig(
@@ -63,11 +64,11 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Parse duration
         duration_text = " ".join(context.args).lower()
         user_id = update.message.reply_to_message.from_user.id
-        if "minute" in duration_text:
+        if "m" in duration_text:
             duration = int(duration_text.split()[0]) * 60
-        elif "hour" in duration_text:
+        elif "h" in duration_text:
             duration = int(duration_text.split()[0]) * 3600
-        elif "day" in duration_text:
+        elif "d" in duration_text:
             duration = int(duration_text.split()[0]) * 86400
         else:
             raise ValueError("Invalid time format")
@@ -89,7 +90,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text(
             strelizia_response(
-                "I couldn't understand the time duration. Use formats like '1 minute', '5 minutes', '1 hour', or '1 day'."
+                "I couldn't understand the time duration. Use formats like '1 m = minute', '5 m = minutes', '1 h = hour', or '1 d = day'."
             )
         )
 
