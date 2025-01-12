@@ -1,3 +1,4 @@
 python-telegram-bot
 better-profanity
 flask
+nest_asyncio
