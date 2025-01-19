@@ -1,14 +1,28 @@
 from telegram import Update, ChatPermissions
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import logging
+logger = logging.getLogger(__name__)
 import time
 import re
 from better_profanity import profanity
 from datetime import datetime, timedelta
 import json
 from telegram.error import BadRequest
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from keep_alive import keep_aliv
 
-from keep_alive import keep_alive  # Import the keep_alive function from the separate module
+warnings = {}
+
+
+gif_links = {
+    "start": "https://t.me/franxxbotsgarage/3",
+    "mute": "https://t.me/franxxbotsgarage/10",
+    "ban": "https://t.me/franxxbotsgarage/4 ",
+    "warn": "https://t.me/franxxbotsgarage/9",
+    "help": "https://t.me/franxxbotsgarage/11",
+    "smile": "https://t.me/franxxbotsgarage/13",
+    "shout": "https://t.me/franxxbotsgarage/15",}
+
 
 
 # Load bad words from the 'bad_words.txt' file
@@ -46,47 +60,42 @@ def strelizia_response(text):
     return f"💫 Strelizia: {text}"
 
 # Start command handler
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a welcome message when the /start command is issued."""
+    await context.bot.send_animation(chat_id=update.effective_chat.id, animation=gif_links["start"])
     await update.message.reply_text(
         "💫 Hello, I am Strelizia, the protector of this realm! How can I assist you today?"
     )
 
-# Mute handler for admins only
+
+
 async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Check if the user issuing the command is an admin
     user_id_admin = update.message.from_user.id
     chat_id = update.message.chat_id
     chat_member = await context.bot.get_chat_member(chat_id, user_id_admin)
-
+    
     if chat_member.status not in ['administrator', 'creator']:
-        await update.message.reply_text(
-            strelizia_response("💫 Only the elite administrators can mute others.")
-        )
+        await update.message.reply_text(strelizia_response("💫 Only the elite administrators can mute others."))
         return
-
+    
     if not update.message.reply_to_message:
-        await update.message.reply_text(
-            strelizia_response(
-                "To mute someone, reply to their message and specify the duration (e.g., 'mute 2h', 'mute 5m')."
-            )
-        )
+        await update.message.reply_text(strelizia_response("To mute someone, reply to their message and specify the duration (e.g., 'mute 2h', 'mute 5m')."))
         return
-
+    
     try:
         # Parse duration
         if len(context.args) != 1:
             raise ValueError("Invalid time format")
-
+        
         duration_text = context.args[0].lower()
         match = re.match(r"(\d+)([mhd])", duration_text)
-
         if not match:
             raise ValueError("Invalid time format")
-
+        
         duration_value, duration_unit = match.groups()
         duration_value = int(duration_value)
-
+        
         if duration_unit == 'm':
             duration = duration_value * 60
         elif duration_unit == 'h':
@@ -95,25 +104,25 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             duration = duration_value * 86400
         else:
             raise ValueError("Invalid time format")
-
+        
         user_id = update.message.reply_to_message.from_user.id
         until_date = int(time.time() + duration)
 
         # Prevent muting the bot or administrators
         if user_id == context.bot.id:
-            await update.message.reply_text(
-                strelizia_response("💫 I cannot mute myself. I am Strelizia, the protector of this realm!")
-            )
+            await update.message.reply_text(strelizia_response("💫 I cannot mute myself. I am Strelizia, the protector of this realm!"))
             return
 
         # Prevent muting administrators
         chat_member = await context.bot.get_chat_member(chat_id, user_id)
         if chat_member.status in ['administrator', 'creator']:
-            await update.message.reply_text(
-                strelizia_response("💫 I cannot mute an administrator. Even Strelizia must show respect to them!")
-            )
+            await update.message.reply_text(strelizia_response("💫 I cannot mute an administrator. Even Strelizia must show respect to them!"))
             return
 
+        # Send animation before muting
+        await context.bot.send_animation(chat_id=update.effective_chat.id, animation=gif_links["mute"])
+
+        # Mute the user
         await context.bot.restrict_chat_member(
             chat_id=chat_id,
             user_id=user_id,
@@ -121,18 +130,12 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             until_date=until_date,
         )
 
-        await update.message.reply_text(
-            strelizia_response(
-                f"💫 Strelizia has muted @{update.message.reply_to_message.from_user.username} for {duration_text}. Order must be maintained."
-            )
-        )
+        # Send confirmation message
+        await update.message.reply_text(strelizia_response(f"💫 Strelizia has muted @{update.message.reply_to_message.from_user.username} for {duration_text}. Order must be maintained."))
 
     except (IndexError, ValueError):
-        await update.message.reply_text(
-            strelizia_response(
-                "I couldn't understand the time duration. Use formats like 'mute 2m', 'mute 1h', or 'mute 1d'."
-            )
-        )
+        await update.message.reply_text(strelizia_response("I couldn't understand the time duration. Use formats like 'mute 2m', 'mute 1h', or 'mute 1d'."))
+
 
 
 # Unmute handler for admins only
@@ -219,13 +222,118 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
             strelizia_response("There was an issue while unmuting the user. Please try again.")
         )
 
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.reply_to_message:
+        await update.message.reply_text(strelizia_response("To ban someone, reply to their message with the /ban command."))
+        return
 
-# Profanity detection and message deletion
-# Profanity detection and message handling with warning system
-# Warning system
-# Warning system
-# Warning system
-warnings = {}
+    user_id = update.message.from_user.id
+    chat_id = update.message.chat_id
+    chat_member = await context.bot.get_chat_member(chat_id, user_id)
+
+    if chat_member.status not in ['administrator', 'creator']:
+        await update.message.reply_text(strelizia_response("💫 Only admins can ban users."))
+        return
+
+    banned_user_id = update.message.reply_to_message.from_user.id
+    banned_username = update.message.reply_to_message.from_user.username
+
+    if banned_user_id == context.bot.id:
+        await update.message.reply_text(strelizia_response("💫 I cannot ban myself. The protector cannot fall!"))
+        return
+
+    if banned_user_id == user_id:
+        await update.message.reply_text(strelizia_response("💫 I cannot ban you. You are too valuable to the cause!"))
+        return
+
+    try:
+        logger.info(f"Banning user {banned_username} ({banned_user_id}) from chat {chat_id}")
+        await context.bot.ban_chat_member(chat_id, banned_user_id)
+        await context.bot.send_animation(
+            chat_id=update.effective_chat.id,
+            animation=gif_links["ban"]
+        )
+        await update.message.reply_text(strelizia_response(f"💫 @{banned_username} has permanently been banned."))
+    except Exception as e:
+        logger.error(f"Failed to ban user {banned_username} ({banned_user_id}) in chat {chat_id}. Error: {str(e)}")
+        await update.message.reply_text(strelizia_response(f"💫 Failed to ban @{banned_username}. Error: {str(e)}"))
+
+
+
+
+
+
+
+# Warn user function
+async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Check if the user issuing the command is an admin
+    user_id_admin = update.message.from_user.id
+    chat_id = update.message.chat_id
+    chat_member = await context.bot.get_chat_member(chat_id, user_id_admin)
+    
+    if chat_member.status not in ['administrator', 'creator']:
+        await update.message.reply_text(strelizia_response("💫 Only the elite administrators can warn others."))
+        return
+    
+    if not update.message.reply_to_message and len(context.args) != 1:
+        await update.message.reply_text(strelizia_response("To warn someone, reply to their message or provide their username."))
+        return
+
+    # Get the user to warn (either from a reply or from a username argument)
+    if update.message.reply_to_message:
+        user_id = update.message.reply_to_message.from_user.id
+        username = update.message.reply_to_message.from_user.username
+    else:
+        username = context.args[0][1:]  # Remove the '@' symbol from the username argument
+        try:
+            member = await context.bot.get_chat_member(chat_id, username)
+            user_id = member.user.id
+        except Exception as e:
+            await update.message.reply_text(strelizia_response(f"💫 Could not find user {username}."))
+            return
+
+    # Track warnings for the user
+    if user_id not in warnings:
+        warnings[user_id] = 0
+    warnings[user_id] += 1
+
+    # Send the group warning notification with GIF
+    try:
+        await context.bot.send_animation(
+            chat_id=update.effective_chat.id,
+            animation=gif_links["warn"]
+        )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=strelizia_response(f"💫 @{username} has received a warning! This is their {warnings[user_id]} warning. Be mindful of your behavior!")
+        )
+    except Exception as e:
+        await update.message.reply_text(strelizia_response(f"💫 Failed to send group notification. Error: {str(e)}"))
+
+    # If the user reaches 3 warnings, ban them automatically
+    if warnings[user_id] >= 3:
+        try:
+            await context.bot.ban_chat_member(chat_id, user_id)
+            warnings[user_id] = 0  # Reset warning count after banning
+            await context.bot.send_animation(
+                chat_id=update.effective_chat.id,
+                animation=gif_links["ban"]
+            )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=strelizia_response(f"💫 @{username} has been banned due to accumulating 3 warnings! Bye bye!")
+            )
+        except Exception as e:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=strelizia_response(f"💫 Failed to ban @{username}. Error: {str(e)}")
+            )
+
+
+
+
+
+
 
 # Profanity detection and message handling with warning system
 # Updated profanity detection and message deletion with Strelizia's style# Define ad patterns globally at the top
@@ -242,59 +350,88 @@ import re
 from telegram.error import BadRequest
 
 # Profanity detection and message handling with warning system
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+
+
+
+import re
+
+# Define improved ad patterns to catch all potential ad-like behavior
+ad_patterns = [
+    r"http[s]?://",  # Detect links (http://, https://)
+    r"www\.",        # Detect links starting with www
+    r"\b(cheap|sale|discount|buy|offer|limited time|deal|promo|free)\b",  # Ads common words
+]
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ad_patterns = [
-        r"http[s]?://",  # Links (e.g., http://, https://)
-        r"www\.",        # URLs starting with www
-        r"\b(cheap|sale|discount|buy|offer|limited time)\b",  # Common advertising words
-        r"\b(deal|promo|free)\b",  # More advertising words
-    ]
-    
     message_text = update.message.text
     user_id = update.message.from_user.id
     username = update.message.from_user.username
     chat_id = update.message.chat_id
 
     try:
-        # Check if the message contains any bad words from the custom Uzbek list
+        # Initialize warnings if this is the first warning for the user
+        if user_id not in warnings:
+            warnings[user_id] = 0
+
+        # Check if the message contains inappropriate language
         if contains_uzbek_profanity(message_text) or profanity.contains_profanity(message_text):
-            # Delete the message
-            await update.message.delete()
+            await update.message.delete()  # Delete the message
+            warnings[user_id] += 1  # Increment the warning count
 
-            # Log the action
-            logger.info(f"Deleted a message from {username} due to profanity.")
-
-            # Handle warning system
-            if user_id not in warnings:
-                warnings[user_id] = 0
-            warnings[user_id] += 1
-
-            # Handle warning and mute logic
-            if warnings[user_id] >= 3:
-                await mute_user(update, context)  # Automatically mute after 3 warnings
-                warnings[user_id] = 0  # Reset warning count after muting
-            else:
-                # Send a warning privately to the user
+            # Handle the third warning
+            if warnings[user_id] == 3:
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=strelizia_response(f"💫 @{username}, you’ve used inappropriate language. This is your {warnings[user_id]} warning. Be careful.")
+                    text=strelizia_response(f"💫 @{username}, this is your 3rd and final warning. You’ve been banned.")
                 )
-
-                # Send a warning to the group to show others
+                await context.bot.ban_chat_member(
+                    chat_id=chat_id,
+                    user_id=user_id
+                )
+                warnings[user_id] = 0
+            else:
                 await context.bot.send_message(
-                    chat_id=chat_id,  # Group chat_id
-                    text=strelizia_response(f"💫 @{username}, you’ve used inappropriate language. This is their {warnings[user_id]} warning. Please be mindful of your language!")
+                    chat_id=user_id,
+                    text=strelizia_response(f"💫 @{username}, you’ve used inappropriate language. This is your {warnings[user_id]} warning.")
                 )
+            await context.bot.send_animation(
+                chat_id=update.effective_chat.id,
+                animation=gif_links["shout"]
+            )
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=strelizia_response(f"💫 @{username}, you’ve used inappropriate language. This is their {warnings[user_id]} warning. Please be mindful of your language!")
+            )
 
-        # Check if the message contains advertisement
+        # Check for advertisements using the updated regex
         elif any(re.search(pattern, message_text.lower()) for pattern in ad_patterns):
-            await update.message.delete()
+            await update.message.delete()  # Delete the message with an advertisement
+
+            # Send the warning GIF
+            await context.bot.send_animation(
+                chat_id=update.effective_chat.id,
+                animation=gif_links["warn"]
+            )
+
+            # Send the text message notifying the user about the advertisement
             await context.bot.send_message(
                 chat_id=user_id,
                 text=strelizia_response(f"💫 @{username}, advertisement is not allowed here. Keep the chat on topic!")
             )
 
-        # Check for spam (uppercase messages)
+            # Send the message to the group (optional)
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=strelizia_response(f"💫 @{username}, your message contained an advertisement. Please keep the conversation relevant!")
+            )
+
+        # Handle uppercase messages
         elif message_text.isupper():
             await update.message.delete()
             await context.bot.send_message(
@@ -302,19 +439,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text=strelizia_response("💫 Excessive shouting is not permitted. Maintain decorum.")
             )
 
-        # Handle positive behavior (send to the group, not the user privately)
+        # Handle positive behavior (e.g., kind words)
         elif any(keyword in message_text.lower() for keyword in positive_keywords):
+            await context.bot.send_animation(
+                chat_id=update.effective_chat.id,
+                animation=gif_links["smile"]
+            )
             await context.bot.send_message(
-                chat_id=chat_id,  # Send to the group, not the user privately
+                chat_id=chat_id,  
                 text=strelizia_response(f"💫 @{username if username else update.message.from_user.first_name}, your kindness has been noted. Continue to inspire others!")
             )
 
-    except BadRequest as e:
-        # Log the error if message was deleted and cannot be replied to
-        if "Message to be replied not found" in str(e):
-            logger.warning(f"Message from {username} deleted, no reply sent.")
-        else:
-            raise e  # Re-raise the error for unexpected issues
+    except Exception as e:
+        logger.error(f"Error in handle_message: {e}")
+
+
+
+
 
 
 
@@ -342,6 +483,131 @@ def contains_uzbek_profanity(text: str) -> bool:
             return True
     return False
 
+async def add_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Check if the user issuing the command is an admin
+    user_id_admin = update.message.from_user.id
+    chat_id = update.message.chat_id
+    chat_member = await context.bot.get_chat_member(chat_id, user_id_admin)
+
+    if chat_member.status not in ['administrator', 'creator']:
+        await update.message.reply_text(
+            strelizia_response("💫 Only administrators can add bad words to the list.")
+        )
+        return
+
+    # Ensure bad words are provided in the command
+    if len(context.args) < 1:
+        await update.message.reply_text(
+            strelizia_response("💫 Please provide at least one bad word to add.")
+        )
+        return
+
+    bad_words = [word.strip() for word in context.args if word.strip()]  # Clean the words
+    try:
+        # Open the bad_words.txt file, read existing words, and ensure no duplicates
+        with open('bad_words.txt', 'r') as f:
+            existing_words = set(line.strip() for line in f.readlines())
+
+        new_words = [word for word in bad_words if word not in existing_words]
+
+        # Append only new words to the file
+        with open('bad_words.txt', 'a') as f:
+            for word in new_words:
+                f.write(word + "\n")
+
+        if new_words:
+            await update.message.reply_text(
+                strelizia_response(f"💫 The following bad words have been added: {', '.join(new_words)}.")
+            )
+        else:
+            await update.message.reply_text(
+                strelizia_response("💫 No new bad words were added as they already exist in the list.")
+            )
+    except Exception as e:
+        logger.error(f"Error adding bad words: {str(e)}")
+        await update.message.reply_text(
+            strelizia_response("💫 There was an error while adding the bad words. Please try again.")
+        )
+
+
+async def import_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Check if the user issuing the command is an admin
+    user_id_admin = update.message.from_user.id
+    chat_id = update.message.chat_id
+    chat_member = await context.bot.get_chat_member(chat_id, user_id_admin)
+
+    if chat_member.status not in ['administrator', 'creator']:
+        await update.message.reply_text(
+            strelizia_response("💫 Only administrators can import the bad words list.")
+        )
+        return
+
+    try:
+        # Check if the bad_words.txt file exists
+        file_path = 'bad_words.txt'
+        with open(file_path, 'r') as f:
+            if not f.read().strip():
+                await update.message.reply_text(
+                    strelizia_response("💫 The bad words list is currently empty.")
+                )
+                return
+
+        # Send the file as a document to the chat
+        await context.bot.send_document(
+            chat_id=chat_id,
+            document=open(file_path, 'rb'),
+            caption="💫 Here is the bad words list."
+        )
+    except FileNotFoundError:
+        await update.message.reply_text(
+            strelizia_response("💫 The bad words file does not exist. Please add words first.")
+        )
+    except Exception as e:
+        logger.error(f"Error sending bad words file: {str(e)}")
+        await update.message.reply_text(
+            strelizia_response("💫 An error occurred while sending the bad words list. Please try again.")
+        )
+
+
+# Function to send bad_words.txt daily
+async def send_daily_bad_words(context: ContextTypes.DEFAULT_TYPE):
+    try:
+        chat_id = '@enemyofeternity'  # Target username or chat ID
+        file_path = 'bad_words.txt'
+
+        # Check if the file exists and is not empty
+        with open(file_path, 'r') as f:
+            if not f.read().strip():
+                logger.warning("💫 The bad words list is empty, skipping daily send.")
+                return
+
+        # Send the file as a document
+        await context.bot.send_document(
+            chat_id=chat_id,
+            document=open(file_path, 'rb'),
+            caption="💫 Here is your daily bad words list."
+        )
+        logger.info("💫 Successfully sent bad_words.txt to @enemyofeternity.")
+    except FileNotFoundError:
+        logger.error("💫 The bad words file does not exist. Cannot send daily list.")
+    except Exception as e:
+        logger.error(f"Error sending bad words file daily: {str(e)}")
+
+# Command to manually trigger the daily send (for testing or admin use)
+async def send_bad_words_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_daily_bad_words(context)
+
+def setup_scheduler(application: Application):
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        send_daily_bad_words,
+        trigger='cron',
+        hour=22,  # Change to the desired time (24-hour format)
+        minute=0,
+        args=[application.bot],  # Pass the bot instance to the job
+    )
+    scheduler.start()
+    logger.info("💫 Scheduler started for daily bad_words.txt sending.")
 
 
 
@@ -449,19 +715,23 @@ async def handle_positive_behavior(update: Update, context: ContextTypes.DEFAULT
 # Help command handler
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a help message when the /help command is issued."""
+    await context.bot.send_animation(chat_id=update.effective_chat.id, animation=gif_links["help"])
     help_text = (
         "💫 Strelizia: Greetings, dear user! I am Strelizia, the protector of this realm. "
         "Here are the ways I can assist you:\n\n"
         "1. **/start** - Start interacting with me! I'll welcome you to this realm.\n"
         "2. **/mute [duration]** - Mute a user for a specified duration (e.g., 'mute 2h', 'mute 5m').\n"
         "3. **/unmute [username]** - Unmute a user, or reply to their message.\n"
-        "4. **Message with profanity** - I will delete any messages with profane language and warn you.\n"
-        "5. **Advertisement detection** - I will delete any advertisements and remind you to keep the chat on topic.\n"
-        "6. **Spam detection** - If you shout in all caps, I will delete your message and remind you to maintain decorum.\n"
-        "7. **Positive behavior** - I appreciate kindness and will acknowledge your good behavior.\n\n"
-        "💫 If you are an admin, you can also mute or unmute users, and I will respect your decisions as long as they are just!"
+        "4. **/warn [username]** - Warn a user for inappropriate behavior or language.\n"
+        "5. **/ban [username]** - Ban a user from the chat after multiple warnings or violations.\n"
+        "6. **Message with profanity** - I will delete any messages with profane language and warn you.\n"
+        "7. **Advertisement detection** - I will delete any advertisements and remind you to keep the chat on topic.\n"
+        "8. **Spam detection** - If you shout in all caps, I will delete your message and remind you to maintain decorum.\n"
+        "9. **Positive behavior** - I appreciate kindness and will acknowledge your good behavior.\n\n"
+        "💫 If you are an admin, you can also mute, unmute, warn, or ban users. I will respect your decisions as long as they are just!"
     )
     await update.message.reply_text(strelizia_response(help_text))
+
 
 
 # Main function
@@ -472,12 +742,20 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("mute", mute_user))
     application.add_handler(CommandHandler("unmute", unmute_user))
-    application.add_handler(CommandHandler("help", help))  # Add /help command handler here
+    application.add_handler(CommandHandler("ban", ban_user))  # Add /ban command handler
+    application.add_handler(CommandHandler("warn", warn_user))  # Add /warn command handler
+    application.add_handler(CommandHandler("help", help))  # Add /help command handler
+    application.add_handler(CommandHandler("addbadwords", add_bad_words))  # Add /addbadword handler
+    application.add_handler(CommandHandler("import", import_bad_words))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_advertisement))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_spam))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_positive_behavior))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_profane_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, send_daily_bad_words))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, setup_scheduler))
+
+
 
     # Run the bot
     await application.run_polling()
@@ -485,8 +763,10 @@ async def main():
 if __name__ == "__main__":
     import nest_asyncio
     import asyncio
-    keep_alive()  # Start the keep_alive function
+    keep_alive()
+
 
     nest_asyncio.apply()
     asyncio.run(main())
+
 
