@@ -8,8 +8,8 @@ from better_profanity import profanity
 from datetime import datetime, timedelta
 import json
 from telegram.error import BadRequest
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from keep_alive import keep_alive
+
 
 warnings = {}
 
@@ -569,45 +569,6 @@ async def import_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# Function to send bad_words.txt daily
-async def send_daily_bad_words(context: ContextTypes.DEFAULT_TYPE):
-    try:
-        chat_id = '@enemyofeternity'  # Target username or chat ID
-        file_path = 'bad_words.txt'
-
-        # Check if the file exists and is not empty
-        with open(file_path, 'r') as f:
-            if not f.read().strip():
-                logger.warning("💫 The bad words list is empty, skipping daily send.")
-                return
-
-        # Send the file as a document
-        await context.bot.send_document(
-            chat_id=chat_id,
-            document=open(file_path, 'rb'),
-            caption="💫 Here is your daily bad words list."
-        )
-        logger.info("💫 Successfully sent bad_words.txt to @enemyofeternity.")
-    except FileNotFoundError:
-        logger.error("💫 The bad words file does not exist. Cannot send daily list.")
-    except Exception as e:
-        logger.error(f"Error sending bad words file daily: {str(e)}")
-
-# Command to manually trigger the daily send (for testing or admin use)
-async def send_bad_words_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_daily_bad_words(context)
-
-def setup_scheduler(application: Application):
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        send_daily_bad_words,
-        trigger='cron',
-        hour=22,  # Change to the desired time (24-hour format)
-        minute=0,
-        args=[application.bot],  # Pass the bot instance to the job
-    )
-    scheduler.start()
-    logger.info("💫 Scheduler started for daily bad_words.txt sending.")
 
 
 
@@ -752,10 +713,6 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_spam))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_positive_behavior))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_profane_message))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, send_daily_bad_words))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, setup_scheduler))
-
-
 
     # Run the bot
     await application.run_polling()
@@ -764,7 +721,6 @@ if __name__ == "__main__":
     import nest_asyncio
     import asyncio
     keep_alive()
-
 
     nest_asyncio.apply()
     asyncio.run(main())
