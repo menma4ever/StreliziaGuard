@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import json
 from telegram.error import BadRequest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from keep_alive import keep_aliv
+from keep_alive import keep_alive
 
 warnings = {}
 
