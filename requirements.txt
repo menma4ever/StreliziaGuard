@@ -2,4 +2,4 @@ python-telegram-bot
 better-profanity
 flask
 nest_asyncio
-aiogram
+aiogram==2.25.1
