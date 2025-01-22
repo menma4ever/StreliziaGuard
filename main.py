@@ -650,15 +650,10 @@ async def handle_advertisement(update: Update, context: ContextTypes.DEFAULT_TYP
 # Handle positive behavior
 positive_keywords = [
     "thanks", "please", "helpful", "good job", 
-    "rahmat", "iltimos", "yordam", "yaxshi ish", 
-    "mehribon", "qadriga yetish", "a'lo", 
-    # More Uzbek (Latin)
-    "mukofot", "g'alaba", "sabr", "do'stona", "ilhomlantiruvchi", "yaxshi", "yaxshi kayfiyat", 
-    "yordam berish", "rozi", "tasavvur", "ma'naviyat", 
-    # Uzbek (Cyrillic)
-    "рахмат", "илтимос", "ёрдам", "яхши иш", "мехрибон", "қадрига етиш", "ало",
-    "мукофот", "ғалаба", "сабр", "дўстона", "илҳомлантирувчи", "яхши", "яхши кайфият", "ёрдам бериш", "рози", 
-    "тасаввур", "маънавият",
+    "rahmat", "iltimos", "yordam", 
+    "mehribon", 
+    # More Uzbek (Latin 
+    # Uzbek (Cyrillic
     # Russian
     "спасибо", "пожалуйста", "помощь", "хорошая работа", "дружелюбный", "прекрасно", "отлично", "молодец", 
     "вдохновляющий", "добрый", "уважаемый", "благодарный", "спокойствие"
