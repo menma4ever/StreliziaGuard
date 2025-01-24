@@ -649,7 +649,7 @@ async def handle_advertisement(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # Handle positive behavior
 positive_keywords = [
-    "thanks", "please", "helpful", "good job", 
+    "thanks", "good job", "nice",
     "rahmat", "iltimos", "yordam", 
     "mehribon", 
     # More Uzbek (Latin 
