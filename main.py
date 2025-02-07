@@ -27,17 +27,20 @@ gif_links = {
 
 # Load bad words from the 'bad_words.txt' file
 # Define the load_bad_words function before using it
-def load_bad_words(file_path: str):
-    """
-    Load bad words from a text file into a list.
-    Each line in the file should contain one bad word.
-    """
-    with open(file_path, 'r', encoding='utf-8') as file:
-        bad_words = [line.strip().lower() for line in file.readlines()]
-    return bad_words
 
-# Now you can safely call it
-uzbek_bad_words = load_bad_words('bad_words.txt')
+BAD_WORDS_FILE = "bad_words.txt"
+bad_words = set()
+
+# Load bad words from the file at startup
+
+def load_bad_words(file_path):
+    if not os.path.exists(file_path):
+        print(f"Warning: {file_path} not found. Creating an empty list.")
+        return []  # Return an empty list if the file is missing
+
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return [word.strip() for word in file.readlines()]
+
 
 
 # Set up logging
@@ -337,138 +340,155 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Profanity detection and message handling with warning system
 # Updated profanity detection and message deletion with Strelizia's style# Define ad patterns globally at the top
-ad_patterns = [
-    r"http[s]?://",  # Links (e.g., http://, https://)
-    r"www\.",        # URLs starting with www
-    r"\b(cheap|sale|discount|buy|offer|limited time)\b",  # Common advertising words
-    r"\b(deal|promo|free)\b",  # More advertising words
-]
-
-# Updated handle_message function
-# Updated handle_message function
 import re
-from telegram.error import BadRequest
-
-# Profanity detection and message handling with warning system
 import logging
+from telegram import Update
+from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
+# Initialize warnings dictionary
+warnings = {}
 
-
-
-
-import re
-
-# Define improved ad patterns to catch all potential ad-like behavior
+# Define ad patterns
 ad_patterns = [
-    r"http[s]?://",  # Detect links (http://, https://)
-    r"www\.",        # Detect links starting with www
-    r"\b(cheap|sale|discount|buy|offer|limited time|deal|promo|free)\b",  # Ads common words
+    r"http[s]?://",  
+    r"www\.",        
+    r"\b(cheap|sale|discount|buy|offer|limited time|deal|promo|free)\b",  
+    r"\.[a-z]{2,}(?:\/[^\s]*)?",  
 ]
 
+# Define positive behavior keywords
+positive_keywords = ["thanks", "please", "helpful", "good job", "rahmat", "iltimos", "yordam", "mehribon"]
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Ensure the message exists
     if not update.message:
         return  # Exit if there is no message to process
 
-    message_text = update.message.text
     user_id = update.message.from_user.id
-    username = update.message.from_user.username
+    username = update.message.from_user.username or update.message.from_user.first_name
     chat_id = update.message.chat_id
 
-    # Safely check if the message is forwarded
-    is_forwarded = hasattr(update.message, 'forward_from') or hasattr(update.message, 'forward_sender_name')
+    # Message text (if available)
+    message_text = update.message.text or ""
+
+    # 🚀 **Correct Forward Detection** (User, Channel, or Chat)
+    is_forwarded = (
+        getattr(update.message, "forward_origin", None) is not None or  # New Telegram API (User/Chat forwards)
+        getattr(update.message, "forward_from", None) is not None or    # Forward from a user
+        getattr(update.message, "forward_sender_name", None) is not None or  # Hidden sender
+        getattr(update.message, "forward_from_chat", None) is not None  # Forward from a channel or group
+    )
 
     try:
         # Initialize warnings if this is the first warning for the user
         if user_id not in warnings:
             warnings[user_id] = 0
 
-        # Check if the message is forwarded
+        # 🚨 **Delete Forwarded Messages (Including Channels)**
         if is_forwarded:
-            await update.message.delete()  # Delete the forwarded message
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=strelizia_response("💫 Forwarded messages are not allowed here. Please send original content."),
-            )
+            try:
+                await update.message.delete()  # Delete the forwarded message
+                warnings[user_id] += 1  # Increment the warning count
+
+                if warnings[user_id] == 3:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"💫 @{username}, this is your 3rd and final warning. You’ve been banned."
+                    )
+                    await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+                    warnings[user_id] = 0  # Reset warnings after ban
+                else:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"💫 @{username}, forwarded messages are not allowed. This is your {warnings[user_id]} warning."
+                    )
+
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"💫 @{username}, please send original messages. Forwarding is not allowed!"
+                )
+            except BadRequest as e:
+                logger.error(f"Failed to delete message or send warning: {e}")
             return  # Stop further processing for this message
 
         # Check if the message contains inappropriate language
         if contains_uzbek_profanity(message_text) or profanity.contains_profanity(message_text):
-            await update.message.delete()  # Delete the message
-            warnings[user_id] += 1  # Increment the warning count
+            try:
+                await update.message.delete()  # Delete the message
+                warnings[user_id] += 1  # Increment the warning count
 
-            if warnings[user_id] == 3:
+                if warnings[user_id] == 3:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"💫 @{username}, this is your 3rd and final warning. You’ve been banned."
+                    )
+                    await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
+                    warnings[user_id] = 0  # Reset warnings after ban
+                else:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"💫 @{username}, you’ve used inappropriate language. This is your {warnings[user_id]} warning."
+                    )
+
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["shout"])
                 await context.bot.send_message(
-                    chat_id=user_id,
-                    text=strelizia_response(f"💫 @{username}, this is your 3rd and final warning. You’ve been banned.")
-                )
-                await context.bot.ban_chat_member(
                     chat_id=chat_id,
-                    user_id=user_id
+                    text=f"💫 @{username}, please be mindful of your language!"
                 )
-                warnings[user_id] = 0
-            else:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=strelizia_response(f"💫 @{username}, you’ve used inappropriate language. This is your {warnings[user_id]} warning.")
-                )
-            await context.bot.send_animation(
-                chat_id=update.effective_chat.id,
-                animation=gif_links["shout"]
-            )
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=strelizia_response(f"💫 @{username}, you’ve used inappropriate language. This is their {warnings[user_id]} warning. Please be mindful of your language!")
-            )
+            except BadRequest as e:
+                logger.error(f"Failed to delete message or send warning: {e}")
             return  # Stop further processing for this message
 
         # Check for advertisements and links
         elif re.search(r"https://t\.me/[a-zA-Z0-9_]+", message_text.lower()) or \
              any(re.search(pattern, message_text.lower()) for pattern in ad_patterns):
-            await update.message.delete()  # Delete the message with a link or advertisement
+            try:
+                await update.message.delete()  # Delete the message with a link or advertisement
 
-            await context.bot.send_animation(
-                chat_id=update.effective_chat.id,
-                animation=gif_links["warn"]
-            )
-
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=strelizia_response(f"💫 @{username}, links or advertisements are not allowed. Keep the chat on topic!")
-            )
-
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=strelizia_response(f"💫 @{username}, your message contained a link or advertisement. Please follow the rules!")
-            )
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"💫 @{username}, links or advertisements are not allowed. Keep the chat on topic!"
+                )
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"💫 @{username}, your message contained a link or advertisement. Please follow the rules!"
+                )
+            except BadRequest as e:
+                logger.error(f"Failed to delete message or send warning: {e}")
             return  # Stop further processing for this message
 
         # Handle uppercase messages
         elif message_text.isupper():
-            await update.message.delete()
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=strelizia_response("💫 Excessive shouting is not permitted. Maintain decorum.")
-            )
+            try:
+                await update.message.delete()
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="💫 Excessive shouting is not permitted. Maintain decorum."
+                )
+            except BadRequest as e:
+                logger.error(f"Failed to delete message or send warning: {e}")
             return  # Stop further processing for this message
 
         # Handle positive behavior (e.g., kind words)
         elif any(keyword in message_text.lower() for keyword in positive_keywords):
-            await context.bot.send_animation(
-                chat_id=update.effective_chat.id,
-                animation=gif_links["smile"]
-            )
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=strelizia_response(f"💫 @{username if username else update.message.from_user.first_name}, your kindness has been noted. Continue to inspire others!")
-            )
+            try:
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["smile"])
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"💫 @{username}, your kindness has been noted. Continue to inspire others!"
+                )
+            except BadRequest as e:
+                logger.error(f"Failed to send animation or message: {e}")
             return  # Stop further processing for this message
 
     except Exception as e:
         logger.error(f"Error in handle_message: {e}")
+
 
 
 
@@ -732,6 +752,7 @@ async def main():
 if __name__ == "__main__":
     import nest_asyncio
     import asyncio
+    bad_words = load_bad_words("bad_words.txt")
     keep_alive()
 
     nest_asyncio.apply()
