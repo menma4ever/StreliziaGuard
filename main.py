@@ -811,7 +811,6 @@ async def main():
     application.add_handler(CommandHandler("addbadwords", add_bad_words))  # Add /addbadword handler
     application.add_handler(CommandHandler("import", import_bad_words))
     application.add_handler(CommandHandler("callall", callall))  # Add /callall command handler
-    application.add_handler(CommandHandler("toptalk", toptalk))  # Add /toptalk command handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_advertisement))
