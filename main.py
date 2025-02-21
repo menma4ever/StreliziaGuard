@@ -1,13 +1,18 @@
 from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackContext, ContextTypes
 import logging
 logger = logging.getLogger(__name__)
 import time
 import re
 from better_profanity import profanity
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
+import random
 from telegram.error import BadRequest
+from telegram.constants import ParseMode
+from datetime import datetime, timedelta
+from collections import Counter
+
 from keep_alive import keep_alive
 
 
@@ -69,6 +74,71 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "💫 Hello, I am Strelizia, the protector of this realm! How can I assist you today?"
     )
+
+
+
+
+# List of random emojis
+emojis = [
+    '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥲', '😊', '😇', '🙂', 
+    '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '🤗', '🤭', '🤫', 
+    '🤔', '🫡', '🤨', '😐', '😑', '😶', '🫥', '😏', '😒', '🙄', '😬', '😮‍💨', 
+    '🤥', '🫨', '😌', '😔', '😪', '🤤', '😴', '🥴', '😵', '😵‍💫', '🤯', '😎', 
+    '🤠', '🥳', '🥺', '😧', '😮', '😲', '😳', '🥵', '🥶', '😱', '😨', '😰', 
+    '😥', '😢', '😭', '😤', '😡', '😠', '🤬', '💀', '☠️', '👻', '🤡', '🫣', 
+    '😯', '😶‍🌫️', '😈', '👿', '🤩', '🤑', '😵‍😲', '🫠', '😜', '😝', '😛', '🫢'
+]
+
+
+
+
+
+
+def escape_markdown_v2(text):
+    special_chars = r'\_*[]()~`>#+-=|{}.!'
+    return re.sub(f'([{re.escape(special_chars)}])', r'\\\1', text)
+
+def is_admin(user_id, chat_administrators):
+    for admin in chat_administrators:
+        if admin.user.id == user_id:
+            return True
+    return False
+
+async def callall(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat = update.effective_chat
+
+    # Check if the user is an admin
+    if is_admin(user.id, await chat.get_administrators()):
+        # Fetch the chat administrators as a proxy for all users
+        admins = await context.bot.get_chat_administrators(chat.id)
+        member_ids = {admin.user.id for admin in admins}
+
+        call_messages = []
+        emoji_line = []
+
+        for member_id in member_ids:
+            random_emoji = random.choice(emojis)
+            mention = f"[{random_emoji}](tg://user?id={member_id})"
+            emoji_line.append(mention)
+
+            if len(emoji_line) == 5:
+                call_messages.append(' '.join(emoji_line) + 'ᅠ')
+                emoji_line = []
+
+        if emoji_line:
+            call_messages.append(' '.join(emoji_line) + 'ᅠ')
+
+        call_message = "\n".join(call_messages) + "\ncall ended"
+
+        # Send the final message
+        await update.message.reply_text(call_message, parse_mode='MarkdownV2')
+
+    else:
+        await update.message.reply_text("💫 Only administrators can use this command.")
+
+
+
 
 
 
@@ -740,6 +810,9 @@ async def main():
     application.add_handler(CommandHandler("help", help))  # Add /help command handler
     application.add_handler(CommandHandler("addbadwords", add_bad_words))  # Add /addbadword handler
     application.add_handler(CommandHandler("import", import_bad_words))
+    application.add_handler(CommandHandler("callall", callall))  # Add /callall command handler
+    application.add_handler(CommandHandler("toptalk", toptalk))  # Add /toptalk command handler
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_advertisement))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_spam))
@@ -757,5 +830,4 @@ if __name__ == "__main__":
 
     nest_asyncio.apply()
     asyncio.run(main())
-
 
