@@ -12,8 +12,20 @@ from telegram.error import BadRequest
 from telegram.constants import ParseMode
 from datetime import datetime, timedelta
 from collections import Counter
+import os
+from telegram import Bot
+import asyncio
 
 from keep_alive import keep_alive
+
+
+
+try:
+    loop = asyncio.get_running_loop()
+    loop.stop()  # Stop the loop instead of closing it
+except RuntimeError:
+    pass  # Ignore if there is no running loop
+
 
 
 warnings = {}
@@ -61,7 +73,7 @@ profanity.load_censor_words()
 # Store warnings and cooldowns
 warnings = {}
 cooldowns = {}
-admins = [123456789]  # Example admin IDs
+admins = [1150034136]  # Example admin IDs
 
 # Strelizia's tone and style for bot responses
 def strelizia_response(text):
@@ -439,84 +451,173 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     username = update.message.from_user.username or update.message.from_user.first_name
     chat_id = update.message.chat_id
+    group_chat_id = 2262322366  # Replace with your target group ID where media should be forwarded
 
     message_text = update.message.text or ""
 
-    # 🚀 **Correct Forward Detection** (User, Channel, or Chat)
     is_forwarded = (
         getattr(update.message, "forward_origin", None) is not None or
-        getattr(update.message, "forward_from", None) is not None or
         getattr(update.message, "forward_sender_name", None) is not None or
-        getattr(update.message, "forward_from_chat", None) is not None
+        getattr(update.message, "forward_from_chat", None) is not None or
+        hasattr(update.message, "forward_date") or
+        hasattr(update.message, "forward_from_message_id") or
+        getattr(update.message, "forward_signature", None) is not None or
+        getattr(update.message, "forward_sender_chat", None) is not None or
+        hasattr(update.message, "media_group_id") or  # ✅ Detects multi-media forwards
+        (update.message.caption and "@" in update.message.caption)  # ✅ Detects forwarded media mentioning a source
+    )
+    if is_forwarded:
+        try:
+            await update.message.delete()
+            await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+            await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, forwarded messages are not allowed!")
+        except BadRequest as e:
+            logger.error(f"Failed to delete forwarded message: {e}")
+        return  # **Stop further processing**
+    has_media = (
+        update.message.photo or 
+        update.message.video or 
+        update.message.audio or 
+        update.message.document
     )
 
     try:
-        # 🚨 **Delete Forwarded Messages (Including Channels)**
+        # 🚨 **Forward Media Messages to Group**
+        if has_media and is_forwarded:
+            try:
+                await update.message.forward(group_chat_id)  # Forward media to the group
+                return  # Stop further processing for media messages
+            except BadRequest as e:
+                logger.error(f"Failed to forward media: {e}")
+                return
+
+        # 🚨 **Delete Forwarded Text Messages (Including Channels)**
         if is_forwarded:
             try:
-                await update.message.delete()  # Delete the forwarded message
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"💫 @{username}, don't forward messages."
-                )
+                await update.message.delete()  # Delete forwarded message
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't forward messages.")
             except BadRequest as e:
                 logger.error(f"Failed to delete message or notify: {e}")
             return
 
-        # Check if the message contains inappropriate language
+        # 🚨 **Check for inappropriate language**
         if contains_uzbek_profanity(message_text) or profanity.contains_profanity(message_text):
             try:
-                await update.message.delete()  # Delete the message
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"💫 @{username}, don't use bad words."
-                )
+                await update.message.delete()
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't use bad words.")
             except BadRequest as e:
                 logger.error(f"Failed to delete message or notify: {e}")
             return
 
-        # Check for advertisements and links
+        # 🚨 **Check for advertisements and links**
         elif re.search(r"https://t\.me/[a-zA-Z0-9_]+", message_text.lower()) or \
              any(re.search(pattern, message_text.lower()) for pattern in ad_patterns):
             try:
                 await update.message.delete()
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"💫 @{username}, don't post links or advertisements."
-                )
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't post links or advertisements.")
             except BadRequest as e:
                 logger.error(f"Failed to delete message or notify: {e}")
             return
 
-        # Handle uppercase messages
+        # 🚨 **Handle uppercase messages**
         elif message_text.isupper():
             try:
                 await update.message.delete()
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"💫 @{username}, don't shout."
-                )
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't shout.")
             except BadRequest as e:
                 logger.error(f"Failed to delete message or notify: {e}")
             return
 
-        # Handle positive behavior (e.g., kind words)
+        # 🎉 **Handle positive behavior (e.g., kind words)**
         elif any(keyword in message_text.lower() for keyword in positive_keywords):
             try:
                 await context.bot.send_animation(chat_id=chat_id, animation=gif_links["smile"])
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"💫 @{username}, your kindness is appreciated!"
-                )
+                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, your kindness is appreciated!")
             except BadRequest as e:
                 logger.error(f"Failed to send animation or message: {e}")
             return
+
+        # 🚀 **Now, check for excessive stickers**
+        await restrict_sticker_spam(update, context)
 
     except Exception as e:
         logger.error(f"Error in handle_message: {e}")
 
 
 
+
+
+
+import time
+import asyncio
+from collections import defaultdict
+from telegram import ChatPermissions
+
+# Track sticker messages per user
+sticker_tracking = defaultdict(lambda: [])
+
+async def restrict_sticker_spam(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username or update.message.from_user.first_name
+    chat_id = update.message.chat_id
+
+    # 🚀 **Detect Stickers**
+    is_sticker = update.message.sticker is not None
+
+    if is_sticker:
+        current_time = time.time()
+
+        # Track user's sticker activity
+        sticker_tracking[user_id].append(current_time)
+
+        # Remove old timestamps beyond 3 seconds
+        sticker_tracking[user_id] = [t for t in sticker_tracking[user_id] if current_time - t <= 3]
+
+        # 🚨 **Check if the user has sent more than 6 stickers within 3 seconds**
+        if len(sticker_tracking[user_id]) > 6:
+            try:
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    permissions=ChatPermissions(
+                        can_send_messages=True, 
+                        can_send_media_messages=True,
+                        can_send_other_messages=False,  # Disable stickers
+                        can_add_web_page_previews=True
+                    )
+                )
+
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"💫 @{username}, you've sent too many stickers! Sticker permissions revoked for 1 hour."
+                )
+
+                # 🚀 **Schedule permission restoration after 1 hour**
+                async def restore_permissions():
+                    await asyncio.sleep(3600)  # Wait 1 hour
+                    await context.bot.restrict_chat_member(
+                        chat_id=chat_id,
+                        user_id=user_id,
+                        permissions=ChatPermissions(
+                            can_send_messages=True,
+                            can_send_media_messages=True,
+                            can_send_other_messages=True,  # Restore stickers
+                            can_add_web_page_previews=True
+                        )
+                    )
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=f"💫 @{username}, sticker permissions restored!"
+                    )
+
+                asyncio.create_task(restore_permissions())
+
+            except Exception as e:
+                logger.error(f"Failed to restrict sticker permissions: {e}")
 
 
 
@@ -536,6 +637,78 @@ def load_bad_words(file_path: str):
 
 uzbek_bad_words = load_bad_words('bad_words.txt')
 
+
+
+ADMIN_USER_ID = 1150034136  # Replace with target user ID
+BOT_TOKEN = "8175120417:AAHqwpE5iMvTibJxZu2atlw_gC4Y60Kdki8"
+
+async def send_bad_words_file():
+    bot = Bot(token=BOT_TOKEN)
+
+    while True:
+        try:
+            await bot.send_document(
+                chat_id=ADMIN_USER_ID,
+                document=open("bad_words.txt", "rb"),
+                caption="💫 Here is the updated bad words list."
+            )
+            print("Bad words file sent successfully!")  # Debugging log
+
+        except Exception as e:
+            print(f"Error sending file: {e}")
+
+        await asyncio.sleep(24 * 60 * 60)  # Wait for 24 hours before sending again
+
+# Run the background task
+
+import urllib.request
+
+async def upload_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id_admin = update.message.from_user.id
+    chat_id = update.message.chat_id
+
+    # Ensure only user 1150034136 can use this command in private chat
+    if chat_id != user_id_admin or user_id_admin != 1150034136:
+        return  # Exit without processing
+
+    # Check if the user replied to a document
+    if not update.message.reply_to_message or not update.message.reply_to_message.document:
+        await update.message.reply_text("💫 Please reply to a valid .txt file with /upload_bad_words.")
+        return
+
+    document = update.message.reply_to_message.document
+
+    # Ensure the file is a text file
+    if not document.file_name.endswith(".txt"):
+        await update.message.reply_text("💫 Only .txt files are allowed!")
+        return
+
+    try:
+        # Get file path from Telegram API
+        file = await context.bot.get_file(document.file_id)
+        file_url = f"https://api.telegram.org/file/bot{context.bot.token}/{file.file_path}"
+
+        # Download the file and replace bad_words.txt
+        import requests
+        response = requests.get(file_url)
+
+        if response.status_code == 200:
+            with open("bad_words.txt", "w", encoding="utf-8") as f:
+                f.write(response.text)
+            await update.message.reply_text("💫 Bad words list has been successfully updated!")
+
+            # 🔄 Refresh bad words in memory
+            global bad_words
+            bad_words = set(load_bad_words("bad_words.txt"))
+
+        else:
+            await update.message.reply_text("💫 Failed to retrieve the file from Telegram.")
+
+    except Exception as e:
+        logger.error(f"Error updating bad words file: {str(e)}")
+        await update.message.reply_text("💫 An error occurred while updating the bad words list. Please try again.")
+
+
 def contains_uzbek_profanity(text: str) -> bool:
     """
     Check if the input text contains any words from the custom bad words library.
@@ -547,90 +720,75 @@ def contains_uzbek_profanity(text: str) -> bool:
     return False
 
 async def add_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Check if the user issuing the command is an admin
     user_id_admin = update.message.from_user.id
     chat_id = update.message.chat_id
-    chat_member = await context.bot.get_chat_member(chat_id, user_id_admin)
 
-    if chat_member.status not in ['administrator', 'creator']:
-        await update.message.reply_text(
-            strelizia_response("💫 Only administrators can add bad words to the list.")
-        )
-        return
+    # Ensure the command only works for the specified admin user in private chat
+    if chat_id != user_id_admin or user_id_admin != 1150034136:
+        return  # Exit without processing
 
-    # Ensure bad words are provided in the command
+    # Check if bad words are provided
     if len(context.args) < 1:
-        await update.message.reply_text(
-            strelizia_response("💫 Please provide at least one bad word to add.")
-        )
+        await update.message.reply_text("💫 Please provide at least one bad word to add.")
         return
 
-    bad_words = [word.strip() for word in context.args if word.strip()]  # Clean the words
+    bad_words_list = [word.strip() for word in context.args if word.strip()]  # Clean words
+
     try:
-        # Open the bad_words.txt file, read existing words, and ensure no duplicates
-        with open('bad_words.txt', 'r') as f:
+        # Read existing bad words
+        with open(BAD_WORDS_FILE, 'r') as f:
             existing_words = set(line.strip() for line in f.readlines())
 
-        new_words = [word for word in bad_words if word not in existing_words]
+        new_words = [word for word in bad_words_list if word not in existing_words]
 
         # Append only new words to the file
-        with open('bad_words.txt', 'a') as f:
+        with open(BAD_WORDS_FILE, 'a') as f:
             for word in new_words:
                 f.write(word + "\n")
 
         if new_words:
-            await update.message.reply_text(
-                strelizia_response(f"💫 The following bad words have been added: {', '.join(new_words)}.")
-            )
+            await update.message.reply_text(f"💫 The following bad words have been added: {', '.join(new_words)}.")
+
+            # 🔄 **Reload bad words into memory instantly**
+            global bad_words
+            bad_words = set(load_bad_words(BAD_WORDS_FILE))  # Refresh bad words without restarting
+
         else:
-            await update.message.reply_text(
-                strelizia_response("💫 No new bad words were added as they already exist in the list.")
-            )
+            await update.message.reply_text("💫 No new bad words were added as they already exist in the list.")
+
     except Exception as e:
         logger.error(f"Error adding bad words: {str(e)}")
-        await update.message.reply_text(
-            strelizia_response("💫 There was an error while adding the bad words. Please try again.")
-        )
+        await update.message.reply_text("💫 There was an error while adding the bad words. Please try again.")
 
 
 async def import_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Check if the user issuing the command is an admin
     user_id_admin = update.message.from_user.id
     chat_id = update.message.chat_id
-    chat_member = await context.bot.get_chat_member(chat_id, user_id_admin)
 
-    if chat_member.status not in ['administrator', 'creator']:
-        await update.message.reply_text(
-            strelizia_response("💫 Only administrators can import the bad words list.")
-        )
-        return
+    # Ensure only user 1150034136 can use this command
+    if user_id_admin != 1150034136:
+        return  # Exit without processing
 
     try:
-        # Check if the bad_words.txt file exists
+        # Check if the bad_words.txt file exists and isn't empty
         file_path = 'bad_words.txt'
         with open(file_path, 'r') as f:
             if not f.read().strip():
-                await update.message.reply_text(
-                    strelizia_response("💫 The bad words list is currently empty.")
-                )
+                await update.message.reply_text("💫 The bad words list is currently empty.")
                 return
 
-        # Send the file as a document to the chat
+        # Send the file as a document
         await context.bot.send_document(
             chat_id=chat_id,
             document=open(file_path, 'rb'),
             caption="💫 Here is the bad words list."
         )
+
     except FileNotFoundError:
-        await update.message.reply_text(
-            strelizia_response("💫 The bad words file does not exist. Please add words first.")
-        )
+        await update.message.reply_text("💫 The bad words file does not exist. Please add words first.")
     except Exception as e:
         logger.error(f"Error sending bad words file: {str(e)}")
-        await update.message.reply_text(
-            strelizia_response("💫 An error occurred while sending the bad words list. Please try again.")
-        )
-
+        await update.message.reply_text("💫 An error occurred while sending the bad words list. Please try again.")
 
 
 
@@ -759,23 +917,29 @@ async def main():
     application.add_handler(CommandHandler("help", help))  # Add /help command handler
     application.add_handler(CommandHandler("addbadwords", add_bad_words))  # Add /addbadword handler
     application.add_handler(CommandHandler("import", import_bad_words))
-    application.add_handler(CommandHandler("callall", callall))  # Add /callall command handler
+    application.add_handler(CommandHandler("callall", callall))
+    application.add_handler(CommandHandler("upload", upload_bad_words))  # Add /callall command handler
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_advertisement))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_spam))
+    asyncio.create_task(send_bad_words_file())
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_positive_behavior))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_profane_message))
-
+    
     # Run the bot
     await application.run_polling()
 
+import nest_asyncio
+nest_asyncio.apply()  # Allows nested event loops
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())  # Run main without closing loop
 if __name__ == "__main__":
     import nest_asyncio
     import asyncio
-    bad_words = load_bad_words("bad_words.txt")
-    keep_alive()
-
-    nest_asyncio.apply()
     asyncio.run(main())
+    bad_words = load_bad_words("bad_words.txt")  # Load bad words list
 
+    nest_asyncio.apply()  # Allow nested event loops
+    keep_alive()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())  # Run main without closing loop
