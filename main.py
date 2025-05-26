@@ -425,8 +425,7 @@ warnings = {}
 # Define ad patterns
 ad_patterns = [
     r"http[s]?://",  
-    r"www\.",        
-    r"\b(cheap|sale|discount|buy|offer|limited time|deal|promo|free)\b",  
+    r"www\.",          
     r"\.[a-z]{2,}(?:\/[^\s]*)?",  
 ]
 
@@ -441,96 +440,53 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.message.from_user.username or update.message.from_user.first_name
     chat_id = update.message.chat_id
 
-    # Message text (if available)
     message_text = update.message.text or ""
 
     # 🚀 **Correct Forward Detection** (User, Channel, or Chat)
     is_forwarded = (
-        getattr(update.message, "forward_origin", None) is not None or  # New Telegram API (User/Chat forwards)
-        getattr(update.message, "forward_from", None) is not None or    # Forward from a user
-        getattr(update.message, "forward_sender_name", None) is not None or  # Hidden sender
-        getattr(update.message, "forward_from_chat", None) is not None  # Forward from a channel or group
+        getattr(update.message, "forward_origin", None) is not None or
+        getattr(update.message, "forward_from", None) is not None or
+        getattr(update.message, "forward_sender_name", None) is not None or
+        getattr(update.message, "forward_from_chat", None) is not None
     )
 
     try:
-        # Initialize warnings if this is the first warning for the user
-        if user_id not in warnings:
-            warnings[user_id] = 0
-
         # 🚨 **Delete Forwarded Messages (Including Channels)**
         if is_forwarded:
             try:
                 await update.message.delete()  # Delete the forwarded message
-                warnings[user_id] += 1  # Increment the warning count
-
-                if warnings[user_id] == 3:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"💫 @{username}, this is your 3rd and final warning. You’ve been banned."
-                    )
-                    await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-                    warnings[user_id] = 0  # Reset warnings after ban
-                else:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"💫 @{username}, forwarded messages are not allowed. This is your {warnings[user_id]} warning."
-                    )
-
-                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
                 await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"💫 @{username}, please send original messages. Forwarding is not allowed!"
+                    chat_id=user_id,
+                    text=f"💫 @{username}, don't forward messages."
                 )
             except BadRequest as e:
-                logger.error(f"Failed to delete message or send warning: {e}")
-            return  # Stop further processing for this message
+                logger.error(f"Failed to delete message or notify: {e}")
+            return
 
         # Check if the message contains inappropriate language
         if contains_uzbek_profanity(message_text) or profanity.contains_profanity(message_text):
             try:
                 await update.message.delete()  # Delete the message
-                warnings[user_id] += 1  # Increment the warning count
-
-                if warnings[user_id] == 3:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"💫 @{username}, this is your 3rd and final warning. You’ve been banned."
-                    )
-                    await context.bot.ban_chat_member(chat_id=chat_id, user_id=user_id)
-                    warnings[user_id] = 0  # Reset warnings after ban
-                else:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text=f"💫 @{username}, you’ve used inappropriate language. This is your {warnings[user_id]} warning."
-                    )
-
-                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["shout"])
                 await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"💫 @{username}, please be mindful of your language!"
+                    chat_id=user_id,
+                    text=f"💫 @{username}, don't use bad words."
                 )
             except BadRequest as e:
-                logger.error(f"Failed to delete message or send warning: {e}")
-            return  # Stop further processing for this message
+                logger.error(f"Failed to delete message or notify: {e}")
+            return
 
         # Check for advertisements and links
         elif re.search(r"https://t\.me/[a-zA-Z0-9_]+", message_text.lower()) or \
              any(re.search(pattern, message_text.lower()) for pattern in ad_patterns):
             try:
-                await update.message.delete()  # Delete the message with a link or advertisement
-
-                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
+                await update.message.delete()
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"💫 @{username}, links or advertisements are not allowed. Keep the chat on topic!"
-                )
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=f"💫 @{username}, your message contained a link or advertisement. Please follow the rules!"
+                    text=f"💫 @{username}, don't post links or advertisements."
                 )
             except BadRequest as e:
-                logger.error(f"Failed to delete message or send warning: {e}")
-            return  # Stop further processing for this message
+                logger.error(f"Failed to delete message or notify: {e}")
+            return
 
         # Handle uppercase messages
         elif message_text.isupper():
@@ -538,11 +494,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.delete()
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text="💫 Excessive shouting is not permitted. Maintain decorum."
+                    text=f"💫 @{username}, don't shout."
                 )
             except BadRequest as e:
-                logger.error(f"Failed to delete message or send warning: {e}")
-            return  # Stop further processing for this message
+                logger.error(f"Failed to delete message or notify: {e}")
+            return
 
         # Handle positive behavior (e.g., kind words)
         elif any(keyword in message_text.lower() for keyword in positive_keywords):
@@ -550,11 +506,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_animation(chat_id=chat_id, animation=gif_links["smile"])
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"💫 @{username}, your kindness has been noted. Continue to inspire others!"
+                    text=f"💫 @{username}, your kindness is appreciated!"
                 )
             except BadRequest as e:
                 logger.error(f"Failed to send animation or message: {e}")
-            return  # Stop further processing for this message
+            return
 
     except Exception as e:
         logger.error(f"Error in handle_message: {e}")
@@ -700,14 +656,7 @@ async def handle_admin_profane_message(update: Update, context: ContextTypes.DEF
 
 
 # Spam detection
-async def handle_spam(update: Update, context: ContextTypes.DEFAULT_TYPE):  
-    if update.message.text.isupper():
-        await update.message.delete()
-        await update.message.reply_text(
-            strelizia_response(
-                "💫 Excessive shouting is not permitted. Maintain decorum."
-            )
-        )
+
 
 
 # Advertisement detection
