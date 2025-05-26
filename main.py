@@ -459,12 +459,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         getattr(update.message, "forward_origin", None) is not None or
         getattr(update.message, "forward_sender_name", None) is not None or
         getattr(update.message, "forward_from_chat", None) is not None or
-        hasattr(update.message, "forward_date") or
-        hasattr(update.message, "forward_from_message_id") or
-        getattr(update.message, "forward_signature", None) is not None or
-        getattr(update.message, "forward_sender_chat", None) is not None or
-        hasattr(update.message, "media_group_id") or  # ✅ Detects multi-media forwards
-        (update.message.caption and "@" in update.message.caption)  # ✅ Detects forwarded media mentioning a source
+        hasattr(update.message, "forward_date")  # ✅ This ensures only actual forwarded messages get detected
     )
     if is_forwarded:
         try:
