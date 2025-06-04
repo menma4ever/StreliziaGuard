@@ -903,6 +903,9 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 import nest_asyncio
 nest_asyncio.apply()  # Allows nested event loops
 
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+import asyncio
+
 async def main():
     application = Application.builder().token("YOUR_BOT_TOKEN").build()
 
@@ -922,17 +925,16 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_positive_behavior))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_profane_message))
 
-    # Background task
+    # Background task (if needed)
     asyncio.create_task(send_bad_words_file())
 
-    # Run the bot
-    await application.run_polling()
+    # Run the bot without closing the event loop when done
+    await application.run_polling(close_loop=False)
 
-if __name__ == "__main__":
-    import asyncio
-    
+if __name__ == "__main__":    
+    # Load additional resources if required
     bad_words = load_bad_words("bad_words.txt")  # Load bad words list
-    keep_alive()  # Keeps service running
+    keep_alive()  # Keeps the service running if applicable
 
-    # Use asyncio.run for a cleaner event loop execution
+    # Start the main asynchronous function with asyncio.run
     asyncio.run(main())
