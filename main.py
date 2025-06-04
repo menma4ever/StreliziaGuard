@@ -900,41 +900,39 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # Main function
+import nest_asyncio
+nest_asyncio.apply()  # Allows nested event loops
+
 async def main():
-    application = Application.builder().token("8175120417:AAHqwpE5iMvTibJxZu2atlw_gC4Y60Kdki8").build()
+    application = Application.builder().token("YOUR_BOT_TOKEN").build()
 
     # Add your handlers here
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("mute", mute_user))
     application.add_handler(CommandHandler("unmute", unmute_user))
-    application.add_handler(CommandHandler("ban", ban_user))  # Add /ban command handler
-    application.add_handler(CommandHandler("warn", warn_user))  # Add /warn command handler
-    application.add_handler(CommandHandler("help", help))  # Add /help command handler
-    application.add_handler(CommandHandler("addbadwords", add_bad_words))  # Add /addbadword handler
+    application.add_handler(CommandHandler("ban", ban_user))
+    application.add_handler(CommandHandler("warn", warn_user))
+    application.add_handler(CommandHandler("help", help))
+    application.add_handler(CommandHandler("addbadwords", add_bad_words))
     application.add_handler(CommandHandler("import", import_bad_words))
     application.add_handler(CommandHandler("callall", callall))
-    application.add_handler(CommandHandler("upload", upload_bad_words))  # Add /callall command handler
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(CommandHandler("upload", upload_bad_words))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_advertisement))
-    asyncio.create_task(send_bad_words_file())
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_positive_behavior))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_admin_profane_message))
-    
+
+    # Background task
+    asyncio.create_task(send_bad_words_file())
+
     # Run the bot
     await application.run_polling()
 
-import nest_asyncio
-nest_asyncio.apply()  # Allows nested event loops
-loop = asyncio.get_event_loop()
-loop.run_until_complete(main())  # Run main without closing loop
 if __name__ == "__main__":
-    import nest_asyncio
     import asyncio
-    asyncio.run(main())
+    
     bad_words = load_bad_words("bad_words.txt")  # Load bad words list
+    keep_alive()  # Keeps service running
 
-    nest_asyncio.apply()  # Allow nested event loops
-    keep_alive()
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())  # Run main without closing loop
+    # Use asyncio.run for a cleaner event loop execution
+    asyncio.run(main())
