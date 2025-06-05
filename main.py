@@ -899,7 +899,6 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-# Main function
 import nest_asyncio
 nest_asyncio.apply()  # Allows nested event loops
 
