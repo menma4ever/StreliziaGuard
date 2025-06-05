@@ -446,29 +446,36 @@ positive_keywords = ["thanks", "please", "helpful", "good job", "rahmat", "iltim
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
-        return  # Exit if there is no message to process
+        return  # Exit if there's no message to process
 
+    # Extract basic information
     user_id = update.message.from_user.id
     username = update.message.from_user.username or update.message.from_user.first_name
     chat_id = update.message.chat_id
-    group_chat_id = 2262322366  # Replace with your target group ID where media should be forwarded
+    group_chat_id = 2262322366  # Replace with your target group ID
 
     message_text = update.message.text or ""
 
+    # Detection for forwarded messages
     is_forwarded = (
         getattr(update.message, "forward_origin", None) is not None or
         getattr(update.message, "forward_sender_name", None) is not None or
         getattr(update.message, "forward_from_chat", None) is not None or
-        hasattr(update.message, "forward_date")  # ✅ This ensures only actual forwarded messages get detected
+        hasattr(update.message, "forward_date")
     )
     if is_forwarded:
         try:
             await update.message.delete()
             await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
-            await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, forwarded messages are not allowed!")
+            await context.bot.send_message(
+                chat_id=chat_id, 
+                text=f"💫 @{username}, forwarded messages are not allowed!"
+            )
         except BadRequest as e:
             logger.error(f"Failed to delete forwarded message: {e}")
-        return  # **Stop further processing**
+        return  # Stop further processing
+
+    # Check if the message has media
     has_media = (
         update.message.photo or 
         update.message.video or 
@@ -477,66 +484,82 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        # 🚨 **Forward Media Messages to Group**
+        # If media AND forwarded, attempt to forward and then stop processing
         if has_media and is_forwarded:
             try:
-                await update.message.forward(group_chat_id)  # Forward media to the group
+                await update.message.forward(group_chat_id)  # Forward media to group
                 return  # Stop further processing for media messages
             except BadRequest as e:
                 logger.error(f"Failed to forward media: {e}")
                 return
 
-        # 🚨 **Delete Forwarded Text Messages (Including Channels)**
+        # Delete forwarded text messages
         if is_forwarded:
             try:
-                await update.message.delete()  # Delete forwarded message
+                await update.message.delete()
                 await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
-                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't forward messages.")
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=f"💫 @{username}, don't forward messages."
+                )
             except BadRequest as e:
                 logger.error(f"Failed to delete message or notify: {e}")
             return
 
-        # 🚨 **Check for inappropriate language**
-        if contains_uzbek_profanity(message_text) or profanity.contains_profanity(message_text):
+        # **Check for inappropriate language using our new logic**
+        allowed_words = load_allowed_words("bad_words.txt")
+        if should_filter_message(message_text, allowed_words):
+            try:
+                await update.message.delete()
+                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["shout"])
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=f"💫 @{username}, don't use bad words."
+                )
+            except BadRequest as e:
+                logger.error(f"Failed to delete message or notify: {e}")
+            return
+
+        # Check for advertisements/links
+        if (re.search(r"https://t\.me/[a-zA-Z0-9_]+", message_text.lower()) or 
+            any(re.search(pattern, message_text.lower()) for pattern in ad_patterns)):
             try:
                 await update.message.delete()
                 await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
-                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't use bad words.")
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=f"💫 @{username}, don't post links or advertisements."
+                )
             except BadRequest as e:
                 logger.error(f"Failed to delete message or notify: {e}")
             return
 
-        # 🚨 **Check for advertisements and links**
-        elif re.search(r"https://t\.me/[a-zA-Z0-9_]+", message_text.lower()) or \
-             any(re.search(pattern, message_text.lower()) for pattern in ad_patterns):
+        # Handle uppercase (shouting) messages
+        if message_text.isupper():
             try:
                 await update.message.delete()
                 await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
-                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't post links or advertisements.")
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=f"💫 @{username}, don't shout."
+                )
             except BadRequest as e:
                 logger.error(f"Failed to delete message or notify: {e}")
             return
 
-        # 🚨 **Handle uppercase messages**
-        elif message_text.isupper():
-            try:
-                await update.message.delete()
-                await context.bot.send_animation(chat_id=chat_id, animation=gif_links["warn"])
-                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, don't shout.")
-            except BadRequest as e:
-                logger.error(f"Failed to delete message or notify: {e}")
-            return
-
-        # 🎉 **Handle positive behavior (e.g., kind words)**
+        # Handle positive behavior (kind words)
         elif any(keyword in message_text.lower() for keyword in positive_keywords):
             try:
                 await context.bot.send_animation(chat_id=chat_id, animation=gif_links["smile"])
-                await context.bot.send_message(chat_id=chat_id, text=f"💫 @{username}, your kindness is appreciated!")
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=f"💫 @{username}, your kindness is appreciated!"
+                )
             except BadRequest as e:
                 logger.error(f"Failed to send animation or message: {e}")
             return
 
-        # 🚀 **Now, check for excessive stickers**
+        # Check for sticker spam
         await restrict_sticker_spam(update, context)
 
     except Exception as e:
